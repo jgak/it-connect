@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ci-cd-demo
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: ci-cd-demo
+  template:
+    metadata:
+      labels:
+        app: ci-cd-demo
+    spec:
+      containers:
+      - name: ci-cd-demo
+        image: ci-cd-demo:1.0
+        ports:
+        - containerPort: 80

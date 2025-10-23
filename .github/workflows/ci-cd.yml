@@ -13,12 +13,11 @@ permissions:
 env:
   IMAGE_NAME: ci-cd-demo
   REGISTRY: ghcr.io/jgak
-  SHORT_SHA: ${{ github.sha }}
+  GIT_SHA: ${{ github.sha }}
 
 jobs:
   build_test_push:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,11 +35,11 @@ jobs:
       - name: Build image
         working-directory: ./app
         run: |
-          docker build -t $REGISTRY/$IMAGE_NAME:${SHORT_SHA} .
+          docker build -t $REGISTRY/$IMAGE_NAME:${GIT_SHA} .
 
       - name: Smoke test
         run: |
-          docker run -d -p 8080:80 --name ci-cd-test $REGISTRY/$IMAGE_NAME:${SHORT_SHA}
+          docker run -d -p 8080:80 --name ci-cd-test $REGISTRY/$IMAGE_NAME:${GIT_SHA}
           sleep 3
           curl -f http://localhost:8080 | grep -E 'Bienvenue|Version|Deployee|Deploy'
           docker rm -f ci-cd-test
@@ -48,22 +47,40 @@ jobs:
       - name: Push image to GHCR
         if: github.ref == 'refs/heads/main'
         run: |
-          docker push $REGISTRY/$IMAGE_NAME:${SHORT_SHA}
+          docker push $REGISTRY/$IMAGE_NAME:${GIT_SHA}
 
   deploy:
     if: github.ref == 'refs/heads/main'
     needs: [ build_test_push ]
     runs-on: self-hosted
-
     steps:
-      - name: Contexte Kubernetes
+      - name: Préparer le contexte Minikube
         run: |
-          kubectl config current-context
+          minikube update-context
+          kubectl config use-context minikube
           kubectl get nodes
+          # (option démo) lever les taints si besoin :
+          kubectl taint nodes minikube node-role.kubernetes.io/control-plane- || true
+          kubectl taint nodes minikube node-role.kubernetes.io/master- || true
 
-      - name: Deploiement
+      - name: Déploiement Helm (upgrade/install)
         env:
-          IMAGE_REF: ghcr.io/jgak/ci-cd-demo:${{ github.sha }}
+          IMAGE_REPO: ghcr.io/jgak/ci-cd-demo
+          IMAGE_TAG: ${{ github.sha }}
         run: |
-          kubectl set image deployment/ci-cd-demo ci-cd-demo=${IMAGE_REF}
-          kubectl rollout status deployment/ci-cd-demo --timeout=120s
+          cd /opt/ci-cd-demo/ci-cd-demo-chart
+          helm upgrade --install ci-cd-demo . \
+            --set image.repository=${IMAGE_REPO} \
+            --set image.tag=${IMAGE_TAG} \
+            --set replicaCount=3 \
+            --set service.type=NodePort \
+            --set service.port=80 \
+            --set service.nodePort=30080 \
+            --set ingress.enabled=false \
+            --set httpRoute.enabled=false
+          helm history ci-cd-demo
+
+      - name: Vérification du rollout
+        run: |
+          kubectl rollout status deployment/ci-cd-demo --timeout=180s
+          kubectl get deploy,po,svc -o wide

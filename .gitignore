@@ -1,0 +1,26 @@
+# ➜ Runner GitHub Actions local (ne jamais versionner)
+actions-runner/
+
+# ➜ Fichiers système / éditeurs
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# ➜ Logs / temp
+*.log
+logs/
+tmp/
+*.tmp
+
+# ➜ Archives & packages
+*.tgz
+*.tar
+*.tar.gz
+*.zip
+
+# ➜ Docker & build cache (au cas où)
+dist/
+build/
